@@ -1,1 +1,1 @@
-Nothing needs to be added to .gitignore since only a JavaScript source file (background.js) was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
+Nothing needs to be added to .gitignore for this change set. The files mentioned (blocked.html, background.js, manifest.json) are all source files that should be tracked in version control. There are no build artifacts, dependencies, or temporary files in the changes that require ignoring.

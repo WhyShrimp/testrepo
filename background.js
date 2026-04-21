@@ -210,6 +210,32 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+/**
+ * Блокировка запросов к заблокированным сайтам
+ */
+chrome.webRequest.onBeforeRequest.addListener(
+  (details) => {
+    const url = new URL(details.url);
+    const domain = url.hostname.replace(/^www\./, '').toLowerCase();
+    
+    // Проверяем, заблокирован ли домен пользователем
+    if (userBlockedSites[domain] === 'blocked') {
+      console.log(`🚫 SafeWeb: Блокировка доступа к ${domain}`);
+      
+      // Перенаправляем на страницу блокировки
+      const blockedUrl = chrome.runtime.getURL('blocked.html?url=' + encodeURIComponent(details.url) + '&domain=' + encodeURIComponent(domain));
+      return { redirectUrl: blockedUrl };
+    }
+    
+    return {};
+  },
+  {
+    urls: ['<all_urls>'],
+    types: ['main_frame', 'sub_frame']
+  },
+  ['blocking']
+);
+
 // Инициализация
 console.log("✅ SafeWeb Pro Background инициализирован");
 console.log("📊 Безопасных сайтов:", Object.keys(SAFE_SITES_DB).length);

@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "🛡️ SafeWeb Pro - Безопасный браузинг",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Защита при серфинге с базой проверенных сайтов",
   "permissions": [
     "tabs",
     "activeTab",
     "scripting",
     "storage",
-    "webNavigation"
+    "webNavigation",
+    "webRequest"
   ],
   "action": {
     "default_popup": "popup.html",
