@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛡️ SafeWeb Pro</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <div class="logo-icon">🛡️</div>
+                <div class="logo-content">
+                    <h1>SafeWeb Pro</h1>
+                    <div class="logo-subtitle">Защита при серфинге</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="header-btn" id="themeToggle">🌙</button>
+                <button class="header-btn" id="refreshBtn">🔄</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="home">
+                <span class="tab-icon">🏠</span>
+                <span>Главная</span>
+            </button>
+            <button class="tab" data-tab="database">
+                <span class="tab-icon">📋</span>
+                <span>База</span>
+            </button>
+            <button class="tab" data-tab="account">
+                <span class="tab-icon">👤</span>
+                <span>Аккаунт</span>
+            </button>
+            <button class="tab" data-tab="settings">
+                <span class="tab-icon">⚙️</span>
+                <span>Настройки</span>
+            </button>
+            <button class="tab" data-tab="tools">
+                <span class="tab-icon">🔧</span>
+                <span>Инструменты</span>
+            </button>
+        </div>
+
+        <div class="tab-content active" id="homeTab">
+            <!-- Поиск -->
+            <div class="search-container">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="siteSearch" class="search-input" 
+                       placeholder="Поиск по сайтам или проверка домена...">
+            </div>
+
+            <!-- Результаты -->
+            <div class="results-container" id="resultsContainer">
+                <!-- Динамически заполняется -->
+            </div>
+        </div>
+
+        <div class="tab-content" id="databaseTab">
+            <div class="database-controls">
+                <button class="btn" id="sortByName">По названию</button>
+                <button class="btn" id="sortByCategory">По категории</button>
+                <button class="btn" id="exportBtn">Экспорт</button>
+            </div>
+            
+            <div class="quick-stats">
+                <div class="quick-stat">
+                    <div class="quick-stat-value" id="totalSites">0</div>
+                    <div class="quick-stat-label">Сайтов</div>
+                </div>
+                <div class="quick-stat">
+                    <div class="quick-stat-value" id="totalCategories">0</div>
+                    <div class="quick-stat-label">Категорий</div>
+                </div>
+                <div class="quick-stat">
+                    <div class="quick-stat-value" id="cacheSize">0</div>
+                    <div class="quick-stat-label">В кэше</div>
+                </div>
+            </div>
+
+            <div class="results-container" id="databaseResults">
+                <!-- Динамически заполняется -->
+            </div>
+        </div>
+
+        <div class="tab-content" id="accountTab">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="statTotalVisits">0</div>
+                    <div class="stat-label">Всего посещений</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statSafeVisits">0</div>
+                    <div class="stat-label">Безопасных</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statUnknownVisits">0</div>
+                    <div class="stat-label">Неизвестных</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statUniqueSites">0</div>
+                    <div class="stat-label">Уникальных</div>
+                </div>
+            </div>
+
+            <div class="category-section">
+                <div class="category-header">
+                    Последние посещения
+                    <span id="lastVisitsCount">(0)</span>
+                </div>
+                <div class="results-container" id="lastVisitsContainer">
+                    <!-- Динамически заполняется -->
+                </div>
+            </div>
+
+            <div class="quick-actions">
+                <div class="quick-action" id="resetStatsBtn">
+                    <div class="action-icon">🗑️</div>
+                    <div class="action-text">Сбросить статистику</div>
+                </div>
+                <div class="quick-action" id="exportStatsBtn">
+                    <div class="action-icon">📤</div>
+                    <div class="action-text">Экспорт статистики</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="settingsTab">
+            <div class="category-section">
+                <div class="category-header">Настройки безопасности</div>
+                
+                <div class="setting-item">
+                    <div class="setting-content">
+                        <div class="setting-title">Показывать предупреждения для почты</div>
+                        <div class="setting-description">Предупреждать об опасных ссылках в письмах</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settingEmailWarnings" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-content">
+                        <div class="setting-title">Показывать предупреждения для неизвестных сайтов</div>
+                        <div class="setting-description">Предупреждать о сайтах, которых нет в базе</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settingUnknownWarnings" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-item">
+                    <div class="setting-content">
+                        <div class="setting-title">Звуковые уведомления</div>
+                        <div class="setting-description">Звук при обнаружении опасности</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="settingSoundOnWarning">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="category-section">
+                <div class="category-header">Управление предупреждениями</div>
+                
+                <div class="tool-card" id="restoreWarningsBtn">
+                    <h4>🔄 Восстановить все предупреждения</h4>
+                    <p>Вернуть скрытые предупреждения для всех сайтов</p>
+                </div>
+                
+                <div class="tool-card" id="clearHiddenWarningsBtn">
+                    <h4>🗑️ Очистить список скрытых предупреждений</h4>
+                    <p>Удалить все настройки "Не показывать больше"</p>
+                </div>
+            </div>
+
+            <div class="category-section">
+                <div class="category-header">Внешний вид</div>
+                
+                <div class="setting-item">
+                    <div class="setting-content">
+                        <div class="setting-title">Тема оформления</div>
+                        <div class="setting-description">Выберите цветовую тему</div>
+                    </div>
+                    <select id="settingTheme" class="theme-select">
+                        <option value="auto">Авто (системная)</option>
+                        <option value="light">Светлая</option>
+                        <option value="dark">Темная</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="toolsTab">
+            <div class="results-container">
+                <div class="category-section">
+                    <div class="category-header">Инструменты безопасности</div>
+                    
+                    <div class="tool-card" id="checkCurrentSite">
+                        <h4>🔍 Проверить текущий сайт</h4>
+                        <p>Проверьте безопасность открытой вкладки</p>
+                    </div>
+                    
+                    <div class="tool-card" id="clearCache">
+                        <h4>🗑️ Очистить кэш</h4>
+                        <p>Удалить все кэшированные проверки</p>
+                    </div>
+                    
+                    <div class="tool-card" id="exportDatabase">
+                        <h4>📤 Экспорт базы</h4>
+                        <p>Сохранить базу безопасных сайтов</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="version">SafeWeb Pro v2.0.2</div>
+            <div class="footer-info" id="statsInfo">Загружаем статистику...</div>
+        </div>
+    </div>
+
+    <!-- Модальные окна -->
+    <div class="modal" id="siteDetailsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span id="modalTitle">Детали сайта</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Динамически заполняется -->
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-secondary modal-close">Закрыть</button>
+                <button class="btn btn-primary" id="openSiteBtn">Открыть сайт</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="statsDetailsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>Детальная статистика</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="stats-details">
+                    <div class="stat-detail-item">
+                        <span class="stat-detail-label">Всего проверок:</span>
+                        <span class="stat-detail-value" id="detailTotalChecks">0</span>
+                    </div>
+                    <div class="stat-detail-item">
+                        <span class="stat-detail-label">Безопасных сайтов:</span>
+                        <span class="stat-detail-value" id="detailSafeChecks">0</span>
+                    </div>
+                    <div class="stat-detail-item">
+                        <span class="stat-detail-label">Неизвестных сайтов:</span>
+                        <span class="stat-detail-value" id="detailUnknownChecks">0</span>
+                    </div>
+                    <div class="stat-detail-item">
+                        <span class="stat-detail-label">Последний сброс:</span>
+                        <span class="stat-detail-value" id="detailLastReset">-</span>
+                    </div>
+                </div>
+                
+                <div class="category-section" style="margin-top: 24px;">
+                    <div class="category-header" style="font-size: 16px; margin-bottom: 16px;">
+                        🏆 Популярные сайты
+                    </div>
+                    <div id="popularSitesList">
+                        <!-- Динамически заполняется -->
+                    </div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-secondary modal-close">Закрыть</button>
+                <button class="btn btn-primary" id="resetStatsModalBtn" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                    Сбросить статистику
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

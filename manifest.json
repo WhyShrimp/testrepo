@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "🛡️ SafeWeb Pro - Безопасный браузинг",
+  "version": "2.0.2",
+  "description": "Защита при серфинге с базой проверенных сайтов",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "scripting",
+    "storage",
+    "webNavigation"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "🛡️ SafeWeb Pro"
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.google.com/*",
+        "https://www.google.ru/*",
+        "https://www.google.com.ua/*",
+        "https://www.google.by/*",
+        "https://www.google.kz/*",
+        "https://yandex.ru/*",
+        "https://ya.ru/*",
+        "https://www.bing.com/*",
+        "https://duckduckgo.com/*"
+      ],
+      "js": ["content-search.js"],
+      "run_at": "document_end"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-links.js"],
+      "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "*://mail.google.com/*",
+        "*://mail.ru/*",
+        "*://e.mail.ru/*",
+        "*://account.mail.ru/*",
+        "*://*.mail.ru/*"
+      ],
+      "js": ["content-email-warning.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
