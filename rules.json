@@ -6,8 +6,8 @@
       "type": "block"
     },
     "condition": {
-      "urlFilter": "*",
-      "resourceTypes": ["main_frame", "sub_frame"]
+      "urlFilter": "|https://www.google.com|http://www.google.com|https://google.com|http://google.com",
+      "resourceTypes": ["main_frame"]
     }
   }
 ]
