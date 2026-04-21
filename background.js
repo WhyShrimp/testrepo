@@ -148,8 +148,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         });
         return true;
         
+      case "updateSettings":
+        const settingsToUpdate = request.settings || {};
+        chrome.storage.local.get(['blockedSites', 'hideWarnings', 'showEmailWarnings', 'showUnknownWarnings', 'soundOnWarning', 'theme', 'expertMode'], (result) => {
+          const updatedSettings = {
+            blockedSites: result.blockedSites || {},
+            hideWarnings: result.hideWarnings || {},
+            showEmailWarnings: result.showEmailWarnings ?? true,
+            showUnknownWarnings: result.showUnknownWarnings ?? true,
+            soundOnWarning: result.soundOnWarning || false,
+            theme: result.theme || 'auto',
+            expertMode: result.expertMode || false,
+            ...settingsToUpdate
+          };
+          chrome.storage.local.set(updatedSettings, () => {
+            if (updatedSettings.blockedSites) {
+              userBlockedSites = updatedSettings.blockedSites;
+            }
+            sendResponse({ success: true });
+          });
+        });
+        return true;
+        
       case "getSettings":
-        chrome.storage.local.get(['blockedSites', 'hideWarnings', 'showEmailWarnings', 'showUnknownWarnings', 'soundOnWarning', 'theme'], (result) => {
+        chrome.storage.local.get(['blockedSites', 'hideWarnings', 'showEmailWarnings', 'showUnknownWarnings', 'soundOnWarning', 'theme', 'expertMode'], (result) => {
           sendResponse({ 
             success: true, 
             settings: {
@@ -158,7 +180,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               showEmailWarnings: result.showEmailWarnings ?? true,
               showUnknownWarnings: result.showUnknownWarnings ?? true,
               soundOnWarning: result.soundOnWarning || false,
-              theme: result.theme || 'auto'
+              theme: result.theme || 'auto',
+              expertMode: result.expertMode || false
             }
           });
         });
