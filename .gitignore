@@ -1,1 +1,1 @@
-Nothing needs to be added to the .gitignore file based on the provided changes. The only modified file is 'blocked.html', which is a source file and should not be ignored.
+Nothing needs to be added to the .gitignore file since only a JSON configuration file (`rules.json`) was modified, which is a source/config file that should not be ignored.
