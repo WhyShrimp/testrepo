@@ -190,8 +190,9 @@ class SearchSafety {
       const link = element.querySelector('a[href]');
       if (link) {
         const originalClick = link.onclick;
+        const linkDomain = result.domain || domain;
         link.onclick = (e) => {
-          if (confirm(`⚠️ Внимание!\n\nВы собираетесь перейти на сайт, который не проверен в нашей базе безопасности:\n${domain}\n\nПродолжить?`)) {
+          if (confirm(`⚠️ Внимание!\n\nВы собираетесь перейти на сайт, который не проверен в нашей базе безопасности:\n${linkDomain}\n\nПродолжить?`)) {
             if (originalClick) return originalClick.call(link, e);
             return true;
           }
