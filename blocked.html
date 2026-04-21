@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🚫 Сайт заблокирован - SafeWeb Pro</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 100%;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .icon {
+      font-size: 80px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      color: #ef4444;
+      font-size: 28px;
+      margin-bottom: 16px;
+    }
+
+    .domain {
+      background: #fee2e2;
+      color: #dc2626;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 16px;
+      word-break: break-all;
+      margin: 20px 0;
+    }
+
+    p {
+      color: #6b7280;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    button {
+      padding: 14px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-back {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .btn-back:hover {
+      background: #e5e7eb;
+    }
+
+    .btn-unblock {
+      background: #10b981;
+      color: white;
+    }
+
+    .btn-unblock:hover {
+      background: #059669;
+    }
+
+    .info-box {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 16px;
+      border-radius: 4px;
+      margin-top: 24px;
+      text-align: left;
+    }
+
+    .info-box h3 {
+      color: #92400e;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .info-box p {
+      color: #78350f;
+      font-size: 13px;
+      margin: 0;
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        padding: 24px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      .icon {
+        font-size: 60px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">🚫</div>
+    <h1>Сайт заблокирован</h1>
+    
+    <p>Доступ к этому сайту заблокирован вами в режиме "Опытный пользователь"</p>
+    
+    <div class="domain" id="blockedDomain">example.com</div>
+    
+    <div class="actions">
+      <button class="btn-back" onclick="goBack()">← Вернуться назад</button>
+      <button class="btn-unblock" onclick="unblockSite()">Разблокировать и перейти</button>
+    </div>
+    
+    <div class="info-box">
+      <h3>ℹ️ Информация</h3>
+      <p>Этот сайт был добавлен в ваш личный черный список. Если вы считаете, что это ошибка, вы можете разблокировать его прямо сейчас.</p>
+    </div>
+  </div>
+
+  <script>
+    // Получаем параметры из URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const blockedUrl = urlParams.get('url');
+    const domain = urlParams.get('domain');
+
+    // Отображаем домен
+    document.getElementById('blockedDomain').textContent = domain || 'Неизвестный домен';
+
+    // Функция возврата назад
+    function goBack() {
+      window.history.back();
+    }
+
+    // Функция разблокировки сайта
+    async function unblockSite() {
+      if (!domain) return;
+
+      try {
+        // Получаем текущие настройки
+        const response = await chrome.runtime.sendMessage({ action: 'getSettings' });
+        
+        if (response?.success) {
+          const settings = response.settings;
+          const blockedSites = settings.blockedSites || {};
+          
+          // Удаляем домен из заблокированных
+          delete blockedSites[domain];
+          
+          // Сохраняем обновленные настройки
+          await chrome.runtime.sendMessage({ 
+            action: 'updateBlockedSites', 
+            blockedSites 
+          });
+          
+          // Перенаправляем на исходный сайт
+          if (blockedUrl) {
+            window.location.href = decodeURIComponent(blockedUrl);
+          } else {
+            window.location.href = 'https://' + domain;
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка при разблокировке:', error);
+        alert('Произошла ошибка при разблокировке сайта. Попробуйте снова.');
+      }
+    }
+
+    // Обработка кнопки "Назад" браузера
+    window.onpopstate = function() {
+      // Разрешаем навигацию назад
+    };
+  </script>
+</body>
+</html>
