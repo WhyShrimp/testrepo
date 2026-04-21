@@ -6,6 +6,7 @@ class SearchSafety {
   constructor() {
     this.initialized = false;
     this.userSettings = {};
+    this.userBlockedSites = {};
     this.init();
   }
 
@@ -29,7 +30,7 @@ class SearchSafety {
         { action: 'getSettings' },
         (response) => {
           if (response?.success) {
-            this.userSettings = response.settings;
+            this.userSettings = response.settings || {}; this.userBlockedSites = response.settings?.blockedSites || {};
           }
           resolve();
         }
@@ -113,6 +114,9 @@ class SearchSafety {
         return;
       }
       
+      // Проверяем пользовательские настройки (заблокированные/разрешенные)
+      const userSiteStatus = this.userBlockedSites[domain];
+      
       // Пропускаем, если предупреждение скрыто
       if (this.userSettings.hideWarnings && this.userSettings.hideWarnings[domain]) {
         return;
@@ -126,29 +130,37 @@ class SearchSafety {
       });
       
       if (response?.success) {
-        this.addColorStrip(element, response.result, domain);
+        this.addColorStrip(element, response.result, domain, userSiteStatus);
       }
     } catch (error) {
       console.warn('SafeWeb check error:', error);
     }
   }
 
-  addColorStrip(element, result, domain) {
+  addColorStrip(element, result, domain, userStatus) {
     // Проверяем, не добавлен ли уже индикатор
     if (element.dataset.safewebProcessed === 'true') return;
     
-    // Определяем цвет полоски
-    let color, tooltip;
+    // Определяем цвет полоски и статус
+    let color, tooltip, status;
     
-    switch(result.safe) {
-      case 'safe':
-        color = '#10b981'; // зеленый
-        tooltip = 'Безопасный сайт';
-        break;
-      case 'unknown':
-      default:
-        color = '#f59e0b'; // желтый
-        tooltip = 'Неизвестный сайт';
+    // Приоритет: пользовательские настройки > база данных
+    if (userStatus === 'blocked') {
+      color = '#ef4444'; // красный
+      tooltip = 'Заблокированный сайт (пользователь)';
+      status = 'blocked';
+    } else if (userStatus === 'trusted') {
+      color = '#10b981'; // зеленый
+      tooltip = 'Доверенный сайт (пользователь)';
+      status = 'trusted';
+    } else if (result.safe === 'safe') {
+      color = '#10b981'; // зеленый
+      tooltip = 'Безопасный сайт';
+      status = 'safe';
+    } else {
+      color = '#f59e0b'; // желтый
+      tooltip = 'Неизвестный сайт';
+      status = 'unknown';
     }
     
     // Добавляем цветную полоску слева
@@ -158,6 +170,7 @@ class SearchSafety {
     element.style.position = 'relative';
     element.style.transition = 'all 0.2s ease';
     element.dataset.safewebProcessed = 'true';
+    element.dataset.safewebStatus = status;
     element.title = tooltip;
     
     // Для Яндекса добавляем дополнительный отступ
@@ -239,4 +252,151 @@ class SearchSafety {
 // Запускаем на поисковых страницах
 if (window.location.hostname.match(/(google|yandex|bing|duckduckgo)\./)) {
   new SearchSafety();
+}
+  getStatusIcon(status) {
+    switch(status) {
+      case 'blocked': return '🚫';
+      case 'trusted': return '✅';
+      case 'safe': return '✓';
+      case 'unknown': 
+      default: return '❓';
+    }
+  }
+
+  async showSiteContextMenu(event, domain, status, element) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const existingMenu = document.querySelector('.safeweb-context-menu');
+    if (existingMenu) existingMenu.remove();
+    
+    const menu = document.createElement('div');
+    menu.className = 'safeweb-context-menu';
+    menu.style.cssText = `
+      position: fixed;
+      z-index: 10000;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      padding: 8px 0;
+      min-width: 200px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+    menu.style.left = Math.min(event.pageX, window.innerWidth - 220) + 'px';
+    menu.style.top = Math.min(event.pageY, window.innerHeight - 200) + 'px';
+    
+    const actions = [
+      { icon: '🔒', text: 'Добавить в доверенные', action: 'trust', show: status !== 'trusted' },
+      { icon: '🚫', text: 'Заблокировать сайт', action: 'block', show: status !== 'blocked' },
+      { icon: '↩️', text: 'Убрать из доверенных', action: 'untrust', show: status === 'trusted' },
+      { icon: '✅', text: 'Разблокировать сайт', action: 'unblock', show: status === 'blocked' },
+      { icon: '📤', text: 'Поделиться в базе', action: 'share', show: true }
+    ];
+    
+    menu.innerHTML = actions.filter(a => a.show).map(item => `
+      <div class="context-menu-item" data-action="${item.action}" style="
+        padding: 10px 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        transition: background 0.2s;
+      " onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='white'">
+        <span>${item.icon}</span>
+        <span>${item.text}</span>
+      </div>
+    `).join('');
+    
+    menu.querySelectorAll('.context-menu-item').forEach(item => {
+      item.addEventListener('click', async (e) => {
+        const action = item.dataset.action;
+        await this.handleSiteAction(action, domain);
+        menu.remove();
+        element.dataset.safewebProcessed = 'false';
+        this.processResult(element);
+      });
+    });
+    
+    document.addEventListener('click', function closeMenu(e) {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    });
+    
+    document.body.appendChild(menu);
+  }
+
+  async handleSiteAction(action, domain) {
+    const blockedSites = this.userBlockedSites || {};
+    
+    switch(action) {
+      case 'trust':
+        blockedSites[domain] = 'trusted';
+        break;
+      case 'block':
+        blockedSites[domain] = 'blocked';
+        break;
+      case 'untrust':
+        delete blockedSites[domain];
+        break;
+      case 'unblock':
+        blockedSites[domain] = 'trusted';
+        break;
+      case 'share':
+        await this.shareSiteToDatabase(domain);
+        return;
+    }
+    
+    await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: 'updateBlockedSites', blockedSites },
+        resolve
+      );
+    });
+    
+    this.userBlockedSites = blockedSites;
+    this.showNotification(`Сайт ${domain} обновлен`);
+  }
+
+  async shareSiteToDatabase(domain) {
+    const siteName = prompt(`Введите название сайта ${domain}:`, domain);
+    if (!siteName) return;
+    
+    const category = prompt('Категория (например: Другое):', 'Пользовательское');
+    if (!category) return;
+    
+    const tags = prompt('Теги через запятую:', 'пользовательское');
+    
+    await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { 
+          action: 'shareSite', 
+          domain, 
+          siteData: { n: siteName, c: category || 'Другое', t: (tags || '').split(',').map(t => t.trim()) }
+        },
+        resolve
+      );
+    });
+    
+    alert('Спасибо! Ваш сайт отправлен на модерацию в общую базу.');
+  }
+
+  showNotification(message) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 10001;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+  }
 }
