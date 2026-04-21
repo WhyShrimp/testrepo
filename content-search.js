@@ -9,7 +9,7 @@ class SearchSafety {
     this.userBlockedSites = {};
     this.init();
   }
-
+  
   async init() {
     if (this.initialized) return;
     
@@ -30,7 +30,8 @@ class SearchSafety {
         { action: 'getSettings' },
         (response) => {
           if (response?.success) {
-            this.userSettings = response.settings || {}; this.userBlockedSites = response.settings?.blockedSites || {};
+            this.userSettings = response.settings || {};
+            this.userBlockedSites = response.settings?.blockedSites || {};
           }
           resolve();
         }
@@ -55,26 +56,11 @@ class SearchSafety {
   }
 
   processAllResults() {
-    // Универсальные селекторы для поисковых систем
     const selectors = [
-      // Google
-      '.g',
-      'div[data-sokoban-container]',
-      '.tF2Cxc',
-      
-      // Яндекс
-      '.serp-item',
-      '.organic__url',
-      '.link_theme_outer',
-      '.Path-Item',
-      
-      // Bing
-      '.b_algo',
-      '.b_title',
-      
-      // DuckDuckGo
-      '.result',
-      '.result__body'
+      '.g', 'div[data-sokoban-container]', '.tF2Cxc',
+      '.serp-item', '.organic__url', '.link_theme_outer', '.Path-Item',
+      '.b_algo', '.b_title',
+      '.result', '.result__body'
     ];
     
     selectors.forEach(selector => {
@@ -87,7 +73,6 @@ class SearchSafety {
 
   processResult(element) {
     try {
-      // Находим ближайшую ссылку
       let linkElement = element.closest('a[href]') || element.querySelector('a[href]');
       if (!linkElement && element.tagName === 'A') {
         linkElement = element;
@@ -98,7 +83,6 @@ class SearchSafety {
       const url = new URL(linkElement.href);
       const domain = url.hostname.replace(/^www\./, '');
       
-      // Проверяем безопасность
       this.checkAndMark(element, domain);
       
     } catch (error) {
@@ -108,16 +92,13 @@ class SearchSafety {
 
   async checkAndMark(element, domain) {
     try {
-      // Пропускаем внутренние ссылки поисковиков
       if (domain.includes('google') || domain.includes('yandex') || 
           domain.includes('bing') || domain.includes('duckduckgo')) {
         return;
       }
       
-      // Проверяем пользовательские настройки (заблокированные/разрешенные)
       const userSiteStatus = this.userBlockedSites[domain];
       
-      // Пропускаем, если предупреждение скрыто
       if (this.userSettings.hideWarnings && this.userSettings.hideWarnings[domain]) {
         return;
       }
@@ -138,32 +119,28 @@ class SearchSafety {
   }
 
   addColorStrip(element, result, domain, userStatus) {
-    // Проверяем, не добавлен ли уже индикатор
     if (element.dataset.safewebProcessed === 'true') return;
     
-    // Определяем цвет полоски и статус
     let color, tooltip, status;
     
-    // Приоритет: пользовательские настройки > база данных
     if (userStatus === 'blocked') {
-      color = '#ef4444'; // красный
+      color = '#ef4444';
       tooltip = 'Заблокированный сайт (пользователь)';
       status = 'blocked';
     } else if (userStatus === 'trusted') {
-      color = '#10b981'; // зеленый
+      color = '#10b981';
       tooltip = 'Доверенный сайт (пользователь)';
       status = 'trusted';
     } else if (result.safe === 'safe') {
-      color = '#10b981'; // зеленый
+      color = '#10b981';
       tooltip = 'Безопасный сайт';
       status = 'safe';
     } else {
-      color = '#f59e0b'; // желтый
+      color = '#f59e0b';
       tooltip = 'Неизвестный сайт';
       status = 'unknown';
     }
     
-    // Добавляем цветную полоску слева
     element.style.borderLeft = `4px solid ${color}`;
     element.style.paddingLeft = '12px';
     element.style.marginLeft = '-12px';
@@ -173,14 +150,12 @@ class SearchSafety {
     element.dataset.safewebStatus = status;
     element.title = tooltip;
     
-    // Для Яндекса добавляем дополнительный отступ
     if (window.location.hostname.includes('yandex')) {
       element.style.marginBottom = '16px';
       element.style.borderRadius = '8px';
       element.style.padding = '12px';
     }
     
-    // Добавляем индикатор для неизвестных сайтов
     if (result.safe === 'unknown') {
       const warningIcon = document.createElement('span');
       warningIcon.innerHTML = '❓';
@@ -199,7 +174,6 @@ class SearchSafety {
       
       element.appendChild(warningIcon);
       
-      // Добавляем обработчик клика для предупреждения
       const link = element.querySelector('a[href]');
       if (link) {
         const originalClick = link.onclick;
@@ -215,7 +189,6 @@ class SearchSafety {
       }
     }
     
-    // Эффект при наведении
     element.addEventListener('mouseenter', () => {
       element.style.borderLeftWidth = '6px';
       element.style.paddingLeft = '10px';
@@ -230,7 +203,6 @@ class SearchSafety {
       element.style.boxShadow = 'none';
     });
     
-    // Добавляем контекстное меню по правому клику
     element.addEventListener('contextmenu', (e) => {
       this.showSiteContextMenu(e, domain, status, element);
     });
@@ -282,12 +254,33 @@ class SearchSafety {
       min-width: 200px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     `;
-    menu.style.left = Math.min(event.pageX, window.innerWidth - 220) + 'px';
-    menu.style.top = Math.min(event.pageY, window.innerHeight - 200) + 'px';
+    
+    // Позиционируем меню прямо под местом клика
+    const rect = element.getBoundingClientRect();
+    const menuWidth = 220;
+    const menuHeight = 200;
+    
+    let left = event.clientX;
+    let top = event.clientY + 10; // Небольшой отступ сверху
+    
+    // Проверяем, не выходит ли меню за правый край экрана
+    if (left + menuWidth > window.innerWidth) {
+      left = window.innerWidth - menuWidth - 10;
+    }
+    
+    // Проверяем, не выходит ли меню за нижний край экрана
+    if (top + menuHeight > window.innerHeight) {
+      top = event.clientY - menuHeight - 10; // Показываем над элементом
+    }
+    
+    menu.style.left = Math.max(10, left) + 'px';
+    menu.style.top = Math.max(10, top) + 'px';
+    
+    const isExpertMode = this.userSettings.expertMode === true;
     
     const actions = [
       { icon: '🔒', text: 'Добавить в доверенные', action: 'trust', show: status !== 'trusted' },
-      { icon: '🚫', text: 'Заблокировать сайт', action: 'block', show: status !== 'blocked' },
+      { icon: isExpertMode ? '🔴' : '🚫', text: isExpertMode ? 'Заблокировать сайт' : 'Заблокировать (только эксперт)', action: 'block', show: status !== 'blocked', disabled: !isExpertMode },
       { icon: '↩️', text: 'Убрать из доверенных', action: 'untrust', show: status === 'trusted' },
       { icon: '✅', text: 'Разблокировать сайт', action: 'unblock', show: status === 'blocked' },
       { icon: '📤', text: 'Поделиться в базе', action: 'share', show: true }
@@ -296,12 +289,13 @@ class SearchSafety {
     menu.innerHTML = actions.filter(a => a.show).map(item => `
       <div class="context-menu-item" data-action="${item.action}" style="
         padding: 10px 16px;
-        cursor: pointer;
+        cursor: ${item.disabled ? 'not-allowed' : 'pointer'};
         display: flex;
         align-items: center;
         gap: 10px;
         transition: background 0.2s;
-      " onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='white'">
+        opacity: ${item.disabled ? '0.5' : '1'};
+      " onmouseover="if(!${item.disabled}) this.style.background='#f3f4f6'" onmouseout="this.style.background='white'">
         <span>${item.icon}</span>
         <span>${item.text}</span>
       </div>
@@ -309,6 +303,8 @@ class SearchSafety {
     
     menu.querySelectorAll('.context-menu-item').forEach(item => {
       item.addEventListener('click', async (e) => {
+        if (item.style.opacity === '0.5') return;
+        
         const action = item.dataset.action;
         await this.handleSiteAction(action, domain);
         menu.remove();
@@ -335,6 +331,10 @@ class SearchSafety {
         blockedSites[domain] = 'trusted';
         break;
       case 'block':
+        if (!this.userSettings.expertMode) {
+          alert('Функция блокировки доступна только в режиме "Опытный пользователь"');
+          return;
+        }
         blockedSites[domain] = 'blocked';
         break;
       case 'untrust':

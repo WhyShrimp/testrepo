@@ -125,6 +125,16 @@ class SafeWebProPopup {
     if (exportDatabaseTool) {
       exportDatabaseTool.addEventListener('click', () => this.exportDatabase());
     }
+
+    const exportUserSettingsBtn = document.getElementById('exportUserSettingsBtn');
+    if (exportUserSettingsBtn) {
+      exportUserSettingsBtn.addEventListener('click', () => this.exportUserSettings());
+    }
+
+    const importUserSettingsBtn = document.getElementById('importUserSettingsBtn');
+    if (importUserSettingsBtn) {
+      importUserSettingsBtn.addEventListener('click', () => this.importUserSettings());
+    }
     
     // Аккаунт
     const resetStatsBtn = document.getElementById('resetStatsBtn');
@@ -161,6 +171,18 @@ class SafeWebProPopup {
     if (settingSoundOnWarning) {
       settingSoundOnWarning.addEventListener('change', (e) => {
         this.updateSetting('soundOnWarning', e.target.checked);
+      });
+    }
+
+    const settingExpertMode = document.getElementById('settingExpertMode');
+    if (settingExpertMode) {
+      settingExpertMode.addEventListener('change', (e) => {
+        this.updateSetting('expertMode', e.target.checked);
+        this.userSettings.expertMode = e.target.checked;
+        this.showNotification(
+          e.target.checked ? 'Режим опытного пользователя включен' : 'Режим опытного пользователя выключен',
+          e.target.checked ? 'success' : 'info'
+        );
       });
     }
     
@@ -631,6 +653,7 @@ class SafeWebProPopup {
     document.getElementById('settingEmailWarnings').checked = this.userSettings.showEmailWarnings !== false;
     document.getElementById('settingUnknownWarnings').checked = this.userSettings.showUnknownWarnings !== false;
     document.getElementById('settingSoundOnWarning').checked = this.userSettings.soundOnWarning === true;
+    document.getElementById('settingExpertMode').checked = this.userSettings.expertMode === true;
     document.getElementById('settingTheme').value = this.userSettings.theme || 'auto';
   }
 
@@ -984,6 +1007,65 @@ class SafeWebProPopup {
     URL.revokeObjectURL(url);
     
     this.showNotification('Статистика экспортирована', 'success');
+  }
+
+  exportUserSettings() {
+    chrome.runtime.sendMessage(
+      { action: 'exportUserSettings' },
+      (response) => {
+        if (response?.success) {
+          const data = response.data;
+          const json = JSON.stringify(data, null, 2);
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `safeweb-pro-settings-${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          
+          URL.revokeObjectURL(url);
+          
+          this.showNotification('Настройки экспортированы', 'success');
+        } else {
+          this.showNotification('Ошибка экспорта настроек', 'error');
+        }
+      }
+    );
+  }
+
+  importUserSettings() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = JSON.parse(event.target.result);
+          chrome.runtime.sendMessage(
+            { action: 'importUserSettings', data },
+            (response) => {
+              if (response?.success) {
+                this.showNotification('Настройки импортированы. Перезагрузите страницу.', 'success');
+                setTimeout(() => location.reload(), 1500);
+              } else {
+                this.showNotification('Ошибка импорта настроек', 'error');
+              }
+            }
+          );
+        } catch (error) {
+          this.showNotification('Неверный формат файла', 'error');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
   }
 
   refreshData() {
