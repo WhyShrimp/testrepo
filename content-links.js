@@ -167,9 +167,11 @@ class LinkChecker {
   async onLinkHover(link) {
     // Дополнительная проверка фильтрации при наведении
     if (this.shouldFilterLink(link)) {
+      console.log('[SafeWeb] Ссылка отфильтрована:', link.href);
       return;
     }
     
+    console.log('[SafeWeb] Наведение на ссылку:', link.href);
     this.currentLink = link;
     
     // Очищаем таймер
@@ -180,21 +182,25 @@ class LinkChecker {
       try {
         // Проверяем, что ссылка все еще существует и видима
         if (!document.contains(link)) {
+          console.log('[SafeWeb] Ссылка удалена из DOM');
           return;
         }
         
         const rect = link.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) {
+          console.log('[SafeWeb] Ссылка невидима (размер 0)');
           return;
         }
         
         const style = window.getComputedStyle(link);
         if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          console.log('[SafeWeb] Ссылка скрыта через CSS');
           return;
         }
         
         // Проверяем валидность URL
         if (!link.href || link.href === '#' || link.href.startsWith('javascript:')) {
+          console.log('[SafeWeb] Некорректный URL:', link.href);
           return;
         }
         
@@ -203,31 +209,42 @@ class LinkChecker {
         
         // Пропускаем пустые домены
         if (!domain) {
+          console.log('[SafeWeb] Пустой домен');
           return;
         }
         
         // Пропускаем проверку текущего сайта
         if (domain === window.location.hostname.replace(/^www\./, '')) {
+          console.log('[SafeWeb] Тот же домен:', domain);
           return;
         }
         
         // Проверяем, не скрыто ли предупреждение для этого домена
         if (this.userSettings.hideWarnings && this.userSettings.hideWarnings[domain]) {
+          console.log('[SafeWeb] Предупреждение скрыто для:', domain);
           return;
         }
+        
+        console.log('[SafeWeb] Отправка запроса на проверку:', domain);
         
         const response = await new Promise((resolve) => {
           chrome.runtime.sendMessage(
             { action: 'checkDomain', domain: domain },
-            resolve
+            (res) => {
+              console.log('[SafeWeb] Ответ от background:', res);
+              resolve(res);
+            }
           );
         });
         
         if (response?.success) {
+          console.log('[SafeWeb] Показываем тултип для:', domain);
           this.showTooltip(link, response.result);
+        } else {
+          console.log('[SafeWeb] Ответ без success:', response);
         }
       } catch (error) {
-        // Игнорируем ошибки парсинга URL
+        console.error('[SafeWeb] Ошибка проверки:', error);
       }
     }, 300);
   }
