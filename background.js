@@ -210,12 +210,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+// Инициализация
+console.log("✅ SafeWeb Pro Background инициализирован");
+console.log("📊 Безопасных сайтов:", Object.keys(SAFE_SITES_DB).length);
+
 /**
- * Блокировка запросов к заблокированным сайтам
+ * Блокировка доступа к заблокированным сайтам через перенаправление
  */
-chrome.webRequest.onBeforeRequest.addListener(
-  (details) => {
-    const url = new URL(details.url);
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.url) return;
+  
+  try {
+    const url = new URL(changeInfo.url);
     const domain = url.hostname.replace(/^www\./, '').toLowerCase();
     
     // Проверяем, заблокирован ли домен пользователем
@@ -223,19 +229,10 @@ chrome.webRequest.onBeforeRequest.addListener(
       console.log(`🚫 SafeWeb: Блокировка доступа к ${domain}`);
       
       // Перенаправляем на страницу блокировки
-      const blockedUrl = chrome.runtime.getURL('blocked.html?url=' + encodeURIComponent(details.url) + '&domain=' + encodeURIComponent(domain));
-      return { redirectUrl: blockedUrl };
+      const blockedUrl = chrome.runtime.getURL('blocked.html?url=' + encodeURIComponent(changeInfo.url) + '&domain=' + encodeURIComponent(domain));
+      chrome.tabs.update(tabId, { url: blockedUrl });
     }
-    
-    return {};
-  },
-  {
-    urls: ['<all_urls>'],
-    types: ['main_frame', 'sub_frame']
-  },
-  ['blocking']
-);
-
-// Инициализация
-console.log("✅ SafeWeb Pro Background инициализирован");
-console.log("📊 Безопасных сайтов:", Object.keys(SAFE_SITES_DB).length);
+  } catch (error) {
+    // Игнорируем ошибки парсинга URL
+  }
+});
