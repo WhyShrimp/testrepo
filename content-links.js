@@ -70,10 +70,81 @@ class LinkChecker {
   }
 
   setupListeners() {
-    // Добавляем обработчики на существующие ссылки
-    document.querySelectorAll('a[href^="http"]').forEach(link => {
+    // Добавляем обработчики на существующие ссылки с улучшенной фильтрацией
+    document.querySelectorAll('a[href]').forEach(link => {
+      if (this.shouldFilterLink(link)) return;
       this.addLinkListeners(link);
     });
+  }
+
+  shouldFilterLink(link) {
+    // Пропускаем уже обработанные ссылки
+    if (this.checkedLinks.has(link)) return true;
+    
+    // Пропускаем ссылки внутри элементов safeweb
+    if (link.closest('#safeweb-tooltip, .safeweb-warning-modal, .safeweb-safety-line')) {
+      return true;
+    }
+    
+    // Пропускаем ссылки с определенными классами
+    const excludedClasses = ['safeweb-ignore', 'no-check', 'skip-validation', 'external-link-icon', 'icon-link'];
+    if (excludedClasses.some(cls => link.classList.contains(cls))) {
+      return true;
+    }
+    
+    // Пропускаем ссылки внутри кнопок, форм и служебных элементов
+    if (link.closest('button, input, textarea, select, option, label, fieldset')) {
+      return true;
+    }
+    
+    // Пропускаем ссылки в nav, header, footer (навигационные элементы)
+    if (link.closest('nav, header, footer')) {
+      return true;
+    }
+    
+    // Пропускаем якорные ссылки и javascript:void
+    if (link.href === 'javascript:void(0)' || link.href.startsWith('javascript:')) {
+      return true;
+    }
+    
+    // Пропускаем mailto, tel, ftp ссылки
+    if (link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('ftp:')) {
+      return true;
+    }
+    
+    // Пропускаем очень короткие ссылки (скорее всего служебные)
+    if (link.textContent.trim().length < 2 && !link.querySelector('img, svg')) {
+      return true;
+    }
+    
+    // Пропускаем ссылки без видимого текста и без изображений
+    if (!link.textContent.trim() && !link.querySelector('img, svg, i, span')) {
+      return true;
+    }
+    
+    // Пропускаем ссылки с пустым href или только #
+    if (!link.href || link.href === '#' || link.href.endsWith('#')) {
+      return true;
+    }
+    
+    // Пропускаем ссылки в iframe
+    if (link.closest('iframe')) {
+      return true;
+    }
+    
+    // Пропускаем невидимые ссылки
+    const rect = link.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return true;
+    }
+    
+    // Проверяем видимость через CSS
+    const style = window.getComputedStyle(link);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+      return true;
+    }
+    
+    return false;
   }
 
   addLinkListeners(link) {
@@ -94,6 +165,11 @@ class LinkChecker {
   }
 
   async onLinkHover(link) {
+    // Дополнительная проверка фильтрации при наведении
+    if (this.shouldFilterLink(link)) {
+      return;
+    }
+    
     this.currentLink = link;
     
     // Очищаем таймер
@@ -102,8 +178,33 @@ class LinkChecker {
     // Запускаем проверку с задержкой
     this.hoverTimer = setTimeout(async () => {
       try {
+        // Проверяем, что ссылка все еще существует и видима
+        if (!document.contains(link)) {
+          return;
+        }
+        
+        const rect = link.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+          return;
+        }
+        
+        const style = window.getComputedStyle(link);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          return;
+        }
+        
+        // Проверяем валидность URL
+        if (!link.href || link.href === '#' || link.href.startsWith('javascript:')) {
+          return;
+        }
+        
         const url = new URL(link.href);
         const domain = url.hostname.replace(/^www\./, '');
+        
+        // Пропускаем пустые домены
+        if (!domain) {
+          return;
+        }
         
         // Пропускаем проверку текущего сайта
         if (domain === window.location.hostname.replace(/^www\./, '')) {
@@ -137,6 +238,20 @@ class LinkChecker {
       this.hoverTimer = null;
     }
     this.hideTooltip();
+    
+    // Очищаем стили ссылки при уходе курсора
+    if (this.currentLink) {
+      const link = this.currentLink;
+      link.style.borderBottom = '';
+      link.style.paddingBottom = '';
+      link.style.textDecoration = '';
+      link.style.textDecorationLine = '';
+      link.style.textDecorationStyle = '';
+      
+      const oldLine = link.querySelector('.safeweb-safety-line');
+      if (oldLine) oldLine.remove();
+    }
+    
     this.currentLink = null;
   }
 
@@ -144,9 +259,24 @@ class LinkChecker {
     const link = e.target.closest('a');
     if (!link || !link.href) return;
     
+    // Дополнительная проверка фильтрации при клике
+    if (this.shouldFilterLink(link)) {
+      return true;
+    }
+    
     try {
+      // Проверяем валидность URL
+      if (!link.href || link.href === '#' || link.href.startsWith('javascript:')) {
+        return true;
+      }
+      
       const url = new URL(link.href);
       const domain = url.hostname.replace(/^www\./, '');
+      
+      // Пропускаем пустые домены
+      if (!domain) {
+        return true;
+      }
       
       // Пропускаем, если предупреждение скрыто
       if (this.userSettings.hideWarnings && this.userSettings.hideWarnings[domain]) {
@@ -191,6 +321,11 @@ class LinkChecker {
   showTooltip(link, result) {
     if (!this.tooltip || !this.currentLink || this.currentLink !== link) return;
     
+    // Дополнительная проверка: если ссылка больше не соответствует критериям, не показываем тултип
+    if (this.shouldFilterLink(link)) {
+      return;
+    }
+    
     let color, icon, text, safetyScore;
     
     // Расчет балла безопасности (0-100)
@@ -229,34 +364,42 @@ class LinkChecker {
     
     link.dataset.safewebStatus = result.safe;
     
-    // Убираем старую линию если есть
+    // Убираем старую линию и стили если есть
     const oldLine = link.querySelector('.safeweb-safety-line');
     if (oldLine) oldLine.remove();
     
-    // Создаем линию безопасности ПОД ссылкой
-    const safetyLine = document.createElement('div');
-    safetyLine.className = 'safeweb-safety-line';
-    safetyLine.style.cssText = `
-      position: absolute;
-      bottom: -3px;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: ${color};
-      border-radius: 0 0 2px 2px;
-      pointer-events: none;
-      transition: all 0.2s ease;
-    `;
+    // Сбрасываем стандартное подчеркивание ссылки НАВСЕГДА
+    link.style.textDecoration = 'none !important';
+    link.style.textDecorationLine = 'none !important';
+    link.style.textDecorationStyle = 'none !important';
+    link.style.setProperty('text-decoration', 'none', 'important');
     
-    // Для inline ссылок используем border-bottom
+    // Для inline ссылок используем border-bottom вместо text-decoration
     if (getComputedStyle(link).display === 'inline' || getComputedStyle(link).display === 'inline-block') {
       link.style.borderBottom = `3px solid ${color}`;
       link.style.paddingBottom = '2px';
+      link.style.setProperty('text-decoration', 'none', 'important');
     } else {
       // Для блочных элементов добавляем линию внутрь
-      if (link.style.position !== 'relative') {
+      if (link.style.position !== 'relative' && link.style.position !== 'absolute' && link.style.position !== 'fixed') {
         link.style.position = 'relative';
       }
+      
+      // Создаем линию безопасности ПОД ссылкой
+      const safetyLine = document.createElement('div');
+      safetyLine.className = 'safeweb-safety-line';
+      safetyLine.style.cssText = `
+        position: absolute;
+        bottom: -3px;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: ${color};
+        border-radius: 2px;
+        pointer-events: none;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      `;
       link.appendChild(safetyLine);
     }
     
@@ -492,11 +635,19 @@ class LinkChecker {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1) {
-            if (node.tagName === 'A' && node.href?.startsWith('http')) {
-              this.addLinkListeners(node);
+            // Проверяем сам узел, если это ссылка
+            if (node.tagName === 'A' && node.href) {
+              if (!this.shouldFilterLink(node)) {
+                this.addLinkListeners(node);
+              }
             }
-            const links = node.querySelectorAll('a[href^="http"]');
-            links.forEach(link => this.addLinkListeners(link));
+            // Проверяем все ссылки внутри добавленного узла
+            const links = node.querySelectorAll('a[href]');
+            links.forEach(link => {
+              if (!this.shouldFilterLink(link)) {
+                this.addLinkListeners(link);
+              }
+            });
           }
         });
       });
