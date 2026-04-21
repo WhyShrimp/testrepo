@@ -229,6 +229,11 @@ class SearchSafety {
       element.style.marginLeft = '-12px';
       element.style.boxShadow = 'none';
     });
+    
+    // Добавляем контекстное меню по правому клику
+    element.addEventListener('contextmenu', (e) => {
+      this.showSiteContextMenu(e, domain, status, element);
+    });
   }
 
   setupObserver() {
@@ -247,12 +252,7 @@ class SearchSafety {
       subtree: true
     });
   }
-}
 
-// Запускаем на поисковых страницах
-if (window.location.hostname.match(/(google|yandex|bing|duckduckgo)\./)) {
-  new SearchSafety();
-}
   getStatusIcon(status) {
     switch(status) {
       case 'blocked': return '🚫';
@@ -399,4 +399,9 @@ if (window.location.hostname.match(/(google|yandex|bing|duckduckgo)\./)) {
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 3000);
   }
+}
+
+// Запускаем на поисковых страницах
+if (window.location.hostname.match(/(google|yandex|bing|duckduckgo)\./)) {
+  new SearchSafety();
 }

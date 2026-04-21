@@ -1,1 +1,1 @@
-Nothing needs to be added to .gitignore since the changes only include source code files (.js files) without any build artifacts, dependencies, or temporary files.
+(content-search.js is a source file, and there are no build artifacts, dependencies, or temporary files in the changes)
