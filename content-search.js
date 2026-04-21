@@ -126,14 +126,14 @@ class SearchSafety {
       });
       
       if (response?.success) {
-        this.addColorStrip(element, response.result);
+        this.addColorStrip(element, response.result, domain);
       }
     } catch (error) {
       console.warn('SafeWeb check error:', error);
     }
   }
 
-  addColorStrip(element, result) {
+  addColorStrip(element, result, domain) {
     // Проверяем, не добавлен ли уже индикатор
     if (element.dataset.safewebProcessed === 'true') return;
     
