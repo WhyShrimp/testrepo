@@ -154,42 +154,49 @@ function checkHomoglyphs(domain) {
 
 /**
  * Эвристика URL: анализ пути на подозрительные паттерны
+ * Возвращает детализированный score с разными значениями для разных факторов
  */
 function analyzeUrlHeuristics(fullUrl, pathname) {
   let score = 0;
+  const details = [];
   
-  // Проверка длины URL (очень мягкое правило)
-  if (fullUrl.length > 100) { // Увеличено с 75 до 100
-    score += 5; // Уменьшено с 10 до 5
+  // Проверка длины URL (>75 символов как в ТЗ)
+  if (fullUrl.length > 75) {
+    score += 10;
+    details.push(`Длина URL ${fullUrl.length} > 75 символов (+10)`);
   }
   
-  // Проверка наличия опасных слов в пути (только множественное совпадение)
-  let patternCount = 0;
+  // Проверка наличия опасных слов в пути - КАЖДОЕ слово добавляет баллы
   for (const pattern of DANGEROUS_URL_PATTERNS) {
     if (pathname.includes(pattern)) {
-      patternCount++;
+      score += 5; // Каждое опасное слово +5 баллов
+      details.push(`Найдено опасное слово "${pattern}" (+5)`);
     }
   }
-  // Добавляем баллы только если найдено 2+ опасных слова
-  if (patternCount >= 2) {
-    score += 10; // Значительно уменьшено
-  }
   
-  // Проверка на IP-адрес в URL (остается важным фактором)
+  // Проверка на IP-адрес в URL
   const ipPattern = /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/;
   if (ipPattern.test(fullUrl)) {
-    score += 15; // Уменьшено с 20 до 15
+    score += 20;
+    details.push('Обнаружен IP-адрес в URL (+20)');
   }
   
-  // Проверка на необычное количество поддоменов (только очень большое количество)
+  // Проверка на необычное количество поддоменов (>3 как в ТЗ)
   const subdomainCount = fullUrl.split('.').length - 2; // минус домен и TLD
-  if (subdomainCount > 5) { // Увеличено с 3 до 5
-    score += 10; // Уменьшено с 15 до 10
+  if (subdomainCount > 3) {
+    score += 15;
+    details.push(`Много поддоменов: ${subdomainCount} > 3 (+15)`);
   }
   
-  // Проверка на символ @ в URL (фишинговая техника - остается важным)
+  // Проверка на символ @ в URL (фишинговая техника)
   if (fullUrl.includes('@') && fullUrl.indexOf('@') < fullUrl.indexOf('/')) {
-    score += 20; // Уменьшено с 25 до 20
+    score += 25;
+    details.push('Обнаружен символ @ в URL (+25)');
+  }
+  
+  // Выводим детали в консоль для отладки
+  if (details.length > 0) {
+    console.log('[PhishingProtector] Эвристика URL детали:', details, 'Итого score:', score);
   }
   
   return score;
@@ -352,25 +359,41 @@ function performFullCheck(url) {
       isSafe: false
     };
 
-    // Проверка на омоглифы и Punycode (критический фактор - блокируем только при наличии других факторов)
+    // Проверка на омоглифы и Punycode (критический фактор)
     const hasHomoglyphs = checkHomoglyphs(hostname);
     if (hasHomoglyphs) {
       result.reasons.push('Обнаружено смешение кириллических и латинских символов (омоглифы)');
-      result.score += 40; // Уменьшено с 50
+      result.score += 50; // +50 баллов как в ТЗ
     }
 
-    // Эвристика URL (низкий приоритет, только как дополнительный фактор)
+    // Эвристика URL - КАЖДОЕ правило добавляет свои баллы
     const urlHeuristicScore = analyzeUrlHeuristics(fullUrl, pathname);
     if (urlHeuristicScore > 0) {
       result.reasons.push(`Подозрительные паттерны в URL (score: ${urlHeuristicScore})`);
       result.score += urlHeuristicScore;
     }
 
-    // Проверка на тайпсквоттинг (критический фактор - блокируем только при наличии других факторов)
+    // Проверка на тайпсквоттинг (критический фактор)
     const typosquatMatch = checkTyposquatting(hostname);
     if (typosquatMatch) {
       result.reasons.push(`Похож на популярный домен "${typosquatMatch}" (тайпсквоттинг)`);
-      result.score += 35; // Уменьшено с 40
+      result.score += 50; // +50 баллов за distance=1, +25 за distance=2
+    }
+    
+    // Дополнительная проверка для distance=2 (возвращаем частичный score)
+    if (!typosquatMatch) {
+      const cleanInputDomain = hostname.replace(/^www\./, '');
+      for (const popularDomain of POPULAR_DOMAINS) {
+        const cleanPopularDomain = popularDomain.replace(/^www\./, '');
+        if (cleanInputDomain === cleanPopularDomain) continue;
+        
+        const distance = calculateLevenshteinDistance(cleanInputDomain, cleanPopularDomain);
+        if (distance === 2) {
+          result.reasons.push(`Отдаленно похож на "${popularDomain}" (расстояние Левенштейна = 2)`);
+          result.score += 25; // +25 баллов за distance=2
+          break;
+        }
+      }
     }
 
     // Проверка редиректов (если это сокращатель)
@@ -383,18 +406,18 @@ function performFullCheck(url) {
       });
     }
 
-    // Блокируем ТОЛЬКО если score выше ОЧЕНЬ ВЫСОКОГО порога (120 баллов)
-    // Это означает, что нужно сочетание МНОГИХ факторов одновременно
+    // Блокируем ТОЛЬКО если score выше ПОРОГА (100 баллов)
+    // Это требует сочетания нескольких факторов для блокировки
     if (result.score >= BLOCKING_THRESHOLD) {
       result.isSuspicious = true;
     }
 
-    // Дополнительное правило: блокируем только если есть ХОТЯ БЫ ДВА критических фактора
-    // (омоглифы И тайпсквоттинг одновременно, или один из них + очень высокий heuristic score)
-    const criticalFactorsCount = (hasHomoglyphs ? 1 : 0) + (typosquatMatch ? 1 : 0);
-    if (criticalFactorsCount >= 2 || (criticalFactorsCount === 1 && result.score >= 80)) {
-      result.isSuspicious = true;
-    }
+    // Выводим итоговый score в консоль для отладки
+    console.log(`[PhishingProtector] Итоговая проверка URL: ${url}`);
+    console.log(`  - Score: ${result.score}`);
+    console.log(`  - Порог блокировки: ${BLOCKING_THRESHOLD}`);
+    console.log(`  - Подозрительный: ${result.isSuspicious}`);
+    console.log(`  - Причины:`, result.reasons);
 
     return result;
   } catch (error) {
