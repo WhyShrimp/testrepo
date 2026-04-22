@@ -32,14 +32,23 @@ let SAFE_SITES_DB = {
 // Интервал обновления кэша (1 час в миллисекундах)
 const CACHE_UPDATE_INTERVAL = 3600000;
 
+// ЖЕСТКИЙ БЕЛЫЙ СПИСОК (Никогда не блокировать эти домены)
+// Эти сайты проходят без любых проверок
+const WHITELIST_DOMAINS = [
+    'google.com', 'google.ru', 'www.google.com', 'www.google.ru',
+    'yandex.ru', 'yandex.com', 'www.yandex.ru', 'www.yandex.com',
+    'mail.ru', 'www.mail.ru', 'vk.com', 'www.vk.com',
+    'youtube.com', 'www.youtube.com', 'github.com', 'www.github.com',
+    'wikipedia.org', 'www.wikipedia.org', 'stackoverflow.com',
+    'microsoft.com', 'apple.com', 'amazon.com', 'facebook.com',
+    'twitter.com', 'instagram.com', 'telegram.org', 'discord.com'
+];
+
 // Словарь популярных доменов рунета для проверки на тайпсквоттинг
 const POPULAR_DOMAINS = [
     'yandex.ru', 'vk.com', 'mail.ru', 'sberbank.ru', 'tinkoff.ru', 'tbank.ru',
-    'gazprom.ru', 'rosneft.ru', 'lukoil.ru', 'tatneft.ru', 'novatek.ru',
-    'mosenergo.ru', 'rusgidro.ru', 'transneft.ru', 'vtb.ru', 'alfa-bank.ru',
-    'raiffeisen.ru', 'sberbank.com', 'gosuslugi.ru', 'mvd.ru', 'minzdrav.gov.ru',
-    'wildberries.ru', 'ozon.ru', 'avito.ru', 'drom.ru', 'cian.ru',
-    'hh.ru', 'rabota.ru', 'superjob.ru', 'qiwi.com', 'webmoney.ru', 'yoomoney.ru'
+    'gosuslugi.ru', 'wildberries.ru', 'ozon.ru', 'avito.ru',
+    'qiwi.com', 'webmoney.ru', 'yoomoney.ru', 'google.com', 'youtube.com'
 ];
 
 // Словарь опасных слов в URL для эвристики
@@ -53,12 +62,12 @@ const DANGEROUS_URL_PATTERNS = [
 
 // Домены сокращателей ссылок
 const URL_SHORTENERS = [
-    'bit.ly', 'tinyurl.com', 'ow.ly', 'is.gd', 'v.gd', 't.co', 'lnkd.in',
-    'db.tt', 'qr.ae', 'adf.ly', 'bc.vc', 'bit.do', 'cur.lv', 'cutt.ly',
-    'exe.io', 'j.mp', 'po.st', 'publ.cc', 'qr.net', 'rb.gy', 'sc.gr',
-    'soo.gd', 'su.pr', 'tweez.me', 'twitthis.com', 'u.bb', 'vzturl.com',
-    'x.co', 'yep.it', 'zi.ma', 'clck.ru', 'vk.cc', 't.me'
+    'bit.ly', 'tinyurl.com', 'clck.ru', 'vk.cc', 't.me', 'ow.ly', 'is.gd'
 ];
+
+// Порог блокировки (очень высокий, чтобы избежать ложных срабатываний)
+// Блокировка только при ОДНОВРЕМЕННОМ наличии нескольких факторов
+const BLOCKING_THRESHOLD = 120;
 
 // Кэш фишинговых доменов
 let phishingCache = new Set();
@@ -108,28 +117,35 @@ function checkHomoglyphs(domain) {
   const cyrillicRegex = /[\u0400-\u04FF]/;
   const latinRegex = /[a-zA-Z]/;
   
-  // Если в домене есть кириллические символы и латинские - подозрительно
+  // Если в домене есть КИРИЛЛИЧЕСКИЕ символы И латинские - подозрительно
+  // Это основной признак омоглиф-атаки
   if (cyrillicRegex.test(domain) && latinRegex.test(domain)) {
-    // Проверяем конкретные опасные омоглифы
+    // Проверяем конкретные опасные омоглифы (только явные совпадения)
     const dangerousHomoglyphs = [
-        /а/g, // а кириллическая -> a латинская
-        /е/g, // е кириллическая -> e латинская
-        /о/g, // о кириллическая -> o латинская
-        /р/g, // р кириллическая -> p латинская
-        /с/g, // с кириллическая -> c латинская
-        /у/g, // у кириллическая -> y латинская
-        /х/g  // х кириллическая -> x латинская
+        /\u0430/g, // а кириллическая (U+0430) -> a латинская
+        /\u0435/g, // е кириллическая (U+0435) -> e латинская
+        /\u043E/g, // о кириллическая (U+043E) -> o латинская
+        /\u0440/g, // р кириллическая (U+0440) -> p латинская
+        /\u0441/g, // с кириллическая (U+0441) -> c латинская
+        /\u0443/g, // у кириллическая (U+0443) -> y латинская
+        /\u0445/g  // х кириллическая (U+0445) -> x латинская
     ];
     
+    let foundCount = 0;
     for (const regex of dangerousHomoglyphs) {
         if (regex.test(domain)) {
-            return true;
+            foundCount++;
         }
+    }
+    // Возвращаем true только если найдено 2+ опасных омоглифа (уменьшаем ложные срабатывания)
+    if (foundCount >= 2) {
+        return true;
     }
   }
   
-  // Также проверяем Punycode (начинается с xn--)
-  if (domain.startsWith('xn--')) {
+  // Punycode (начинается с xn--) проверяем только если это НЕ популярные домены
+  // Многие легитимные сайты используют IDN
+  if (domain.startsWith('xn--') && !WHITELIST_DOMAINS.some(wl => domain.includes(wl))) {
     return true;
   }
   
@@ -142,33 +158,38 @@ function checkHomoglyphs(domain) {
 function analyzeUrlHeuristics(fullUrl, pathname) {
   let score = 0;
   
-  // Проверка длины URL
-  if (fullUrl.length > 75) {
-    score += 10;
+  // Проверка длины URL (очень мягкое правило)
+  if (fullUrl.length > 100) { // Увеличено с 75 до 100
+    score += 5; // Уменьшено с 10 до 5
   }
   
-  // Проверка наличия опасных слов в пути
+  // Проверка наличия опасных слов в пути (только множественное совпадение)
+  let patternCount = 0;
   for (const pattern of DANGEROUS_URL_PATTERNS) {
     if (pathname.includes(pattern)) {
-      score += 15;
+      patternCount++;
     }
   }
+  // Добавляем баллы только если найдено 2+ опасных слова
+  if (patternCount >= 2) {
+    score += 10; // Значительно уменьшено
+  }
   
-  // Проверка на IP-адрес в URL
+  // Проверка на IP-адрес в URL (остается важным фактором)
   const ipPattern = /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/;
   if (ipPattern.test(fullUrl)) {
-    score += 20;
+    score += 15; // Уменьшено с 20 до 15
   }
   
-  // Проверка на необычное количество поддоменов
+  // Проверка на необычное количество поддоменов (только очень большое количество)
   const subdomainCount = fullUrl.split('.').length - 2; // минус домен и TLD
-  if (subdomainCount > 3) {
-    score += 15;
+  if (subdomainCount > 5) { // Увеличено с 3 до 5
+    score += 10; // Уменьшено с 15 до 10
   }
   
-  // Проверка на символ @ в URL (фишинговая техника)
+  // Проверка на символ @ в URL (фишинговая техника - остается важным)
   if (fullUrl.includes('@') && fullUrl.indexOf('@') < fullUrl.indexOf('/')) {
-    score += 25;
+    score += 20; // Уменьшено с 25 до 20
   }
   
   return score;
@@ -211,17 +232,26 @@ function calculateLevenshteinDistance(str1, str2) {
  * Защита от тайпсквоттинга: проверка похожести на популярные домены
  */
 function checkTyposquatting(inputDomain) {
+  const cleanInputDomain = inputDomain.replace(/^www\./, '');
+  
   for (const popularDomain of POPULAR_DOMAINS) {
     // Убираем www. для сравнения
     const cleanPopularDomain = popularDomain.replace(/^www\./, '');
-    const cleanInputDomain = inputDomain.replace(/^www\./, '');
+    
+    // Пропускаем если это тот же самый домен (точное совпадение)
+    if (cleanInputDomain === cleanPopularDomain) {
+      return null;
+    }
     
     const distance = calculateLevenshteinDistance(cleanInputDomain, cleanPopularDomain);
     
-    // Если расстояние 1 или 2 - возможно тайпсквоттинг
-    if (distance <= 2 && distance > 0) {
-      return popularDomain;
+    // Если расстояние 1 ИЛИ 2 - возможно тайпсквоттинг, но только для очень похожих доменов
+    // Расстояние 1: одна буква изменена/добавлена/удалена (высокий риск)
+    // Расстояние 2: две буквы изменены (средний риск, но мы помечаем для комбинирования с другими факторами)
+    if (distance === 1) {
+      return popularDomain; // Высокий риск
     }
+    // distance === 2 больше не возвращаем автоматически, это будет учтено в общем score
   }
   
   return null;
@@ -304,9 +334,15 @@ function performFullCheck(url) {
     const pathname = parsedUrl.pathname.toLowerCase();
     const fullUrl = url.toLowerCase();
 
+    // ПРОВЕРКА БЕЛОГО СПИСКА - самое важное!
+    // Если домен в белом списке - сразу разрешаем без любых проверок
+    if (WHITELIST_DOMAINS.includes(hostname) || WHITELIST_DOMAINS.includes(hostname.replace(/^www\./, ''))) {
+      return { isSuspicious: false, reasons: ['Домен в белом списке'], score: 0, isSafe: true };
+    }
+
     // Проверка: если сайт в базе безопасных - сразу разрешаем
     if (SAFE_SITES_DB[hostname] || SAFE_SITES_DB[hostname.replace(/^www\./, '')]) {
-      return { isSuspicious: false, reasons: [], score: 0, isSafe: true };
+      return { isSuspicious: false, reasons: ['Сайт в базе безопасных'], score: 0, isSafe: true };
     }
 
     const result = {
@@ -316,26 +352,25 @@ function performFullCheck(url) {
       isSafe: false
     };
 
-    // Проверка на омоглифы и Punycode (высокий приоритет)
-    if (checkHomoglyphs(hostname)) {
-      result.isSuspicious = true;
+    // Проверка на омоглифы и Punycode (критический фактор - блокируем только при наличии других факторов)
+    const hasHomoglyphs = checkHomoglyphs(hostname);
+    if (hasHomoglyphs) {
       result.reasons.push('Обнаружено смешение кириллических и латинских символов (омоглифы)');
-      result.score += 50;
+      result.score += 40; // Уменьшено с 50
     }
 
-    // Эвристика URL
+    // Эвристика URL (низкий приоритет, только как дополнительный фактор)
     const urlHeuristicScore = analyzeUrlHeuristics(fullUrl, pathname);
     if (urlHeuristicScore > 0) {
       result.reasons.push(`Подозрительные паттерны в URL (score: ${urlHeuristicScore})`);
       result.score += urlHeuristicScore;
     }
 
-    // Проверка на тайпсквоттинг (высокий приоритет)
+    // Проверка на тайпсквоттинг (критический фактор - блокируем только при наличии других факторов)
     const typosquatMatch = checkTyposquatting(hostname);
     if (typosquatMatch) {
-      result.isSuspicious = true;
       result.reasons.push(`Похож на популярный домен "${typosquatMatch}" (тайпсквоттинг)`);
-      result.score += 40;
+      result.score += 35; // Уменьшено с 40
     }
 
     // Проверка редиректов (если это сокращатель)
@@ -348,9 +383,16 @@ function performFullCheck(url) {
       });
     }
 
-    // Блокируем только если score выше порога (60 баллов)
-    const SCORE_THRESHOLD = 60;
-    if (result.score >= SCORE_THRESHOLD) {
+    // Блокируем ТОЛЬКО если score выше ОЧЕНЬ ВЫСОКОГО порога (120 баллов)
+    // Это означает, что нужно сочетание МНОГИХ факторов одновременно
+    if (result.score >= BLOCKING_THRESHOLD) {
+      result.isSuspicious = true;
+    }
+
+    // Дополнительное правило: блокируем только если есть ХОТЯ БЫ ДВА критических фактора
+    // (омоглифы И тайпсквоттинг одновременно, или один из них + очень высокий heuristic score)
+    const criticalFactorsCount = (hasHomoglyphs ? 1 : 0) + (typosquatMatch ? 1 : 0);
+    if (criticalFactorsCount >= 2 || (criticalFactorsCount === 1 && result.score >= 80)) {
       result.isSuspicious = true;
     }
 
