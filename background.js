@@ -300,37 +300,42 @@ async function checkRedirectAsync(url) {
 function performFullCheck(url) {
   try {
     const parsedUrl = new URL(url);
-    const hostname = parsedUrl.hostname.toLowerCase();
+    const hostname = parsedUrl.hostname.toLowerCase().replace(/^www\./, '');
     const pathname = parsedUrl.pathname.toLowerCase();
     const fullUrl = url.toLowerCase();
+
+    // Проверка: если сайт в базе безопасных - сразу разрешаем
+    if (SAFE_SITES_DB[hostname] || SAFE_SITES_DB[hostname.replace(/^www\./, '')]) {
+      return { isSuspicious: false, reasons: [], score: 0, isSafe: true };
+    }
 
     const result = {
       isSuspicious: false,
       reasons: [],
-      score: 0
+      score: 0,
+      isSafe: false
     };
 
-    // Проверка на омоглифы и Punycode
+    // Проверка на омоглифы и Punycode (высокий приоритет)
     if (checkHomoglyphs(hostname)) {
       result.isSuspicious = true;
       result.reasons.push('Обнаружено смешение кириллических и латинских символов (омоглифы)');
-      result.score += 25;
+      result.score += 50;
     }
 
     // Эвристика URL
     const urlHeuristicScore = analyzeUrlHeuristics(fullUrl, pathname);
     if (urlHeuristicScore > 0) {
-      result.isSuspicious = true;
       result.reasons.push(`Подозрительные паттерны в URL (score: ${urlHeuristicScore})`);
       result.score += urlHeuristicScore;
     }
 
-    // Проверка на тайпсквоттинг
+    // Проверка на тайпсквоттинг (высокий приоритет)
     const typosquatMatch = checkTyposquatting(hostname);
     if (typosquatMatch) {
       result.isSuspicious = true;
       result.reasons.push(`Похож на популярный домен "${typosquatMatch}" (тайпсквоттинг)`);
-      result.score += 30;
+      result.score += 40;
     }
 
     // Проверка редиректов (если это сокращатель)
@@ -343,10 +348,16 @@ function performFullCheck(url) {
       });
     }
 
+    // Блокируем только если score выше порога (60 баллов)
+    const SCORE_THRESHOLD = 60;
+    if (result.score >= SCORE_THRESHOLD) {
+      result.isSuspicious = true;
+    }
+
     return result;
   } catch (error) {
     console.error('[PhishingProtector] Ошибка проверки URL:', error);
-    return { isSuspicious: false, reasons: [`Ошибка парсинга URL: ${error.message}`], score: 0 };
+    return { isSuspicious: false, reasons: [`Ошибка парсинга URL: ${error.message}`], score: 0, isSafe: false };
   }
 }
 
