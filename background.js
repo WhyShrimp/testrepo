@@ -154,23 +154,23 @@ function checkHomoglyphs(domain) {
 
 /**
  * Эвристика URL: анализ пути на подозрительные паттерны
- * Возвращает детализированный score с разными значениями для разных факторов
+ * Возвращает ОБЪЕКТ с {score: number, reasons: string[]} для детализации
  */
-function analyzeUrlHeuristics(fullUrl, pathname) {
+function analyzeUrlHeuristics(fullUrl, pathname, hostname) {
   let score = 0;
-  const details = [];
+  const reasons = [];
   
   // Проверка длины URL (>75 символов как в ТЗ)
   if (fullUrl.length > 75) {
     score += 10;
-    details.push(`Длина URL ${fullUrl.length} > 75 символов (+10)`);
+    reasons.push(`Длина URL ${fullUrl.length} > 75 символов (+10)`);
   }
   
   // Проверка наличия опасных слов в пути - КАЖДОЕ слово добавляет баллы
   for (const pattern of DANGEROUS_URL_PATTERNS) {
     if (pathname.includes(pattern)) {
       score += 5; // Каждое опасное слово +5 баллов
-      details.push(`Найдено опасное слово "${pattern}" (+5)`);
+      reasons.push(`Найдено опасное слово "${pattern}" (+5)`);
     }
   }
   
@@ -178,28 +178,26 @@ function analyzeUrlHeuristics(fullUrl, pathname) {
   const ipPattern = /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/;
   if (ipPattern.test(fullUrl)) {
     score += 20;
-    details.push('Обнаружен IP-адрес в URL (+20)');
+    reasons.push('Обнаружен IP-адрес в URL (+20)');
   }
   
   // Проверка на необычное количество поддоменов (>3 как в ТЗ)
-  const subdomainCount = fullUrl.split('.').length - 2; // минус домен и TLD
+  // Считаем точки в hostname для точного подсчета поддоменов
+  const domainParts = hostname.split('.');
+  const subdomainCount = domainParts.length > 2 ? domainParts.length - 2 : 0;
   if (subdomainCount > 3) {
     score += 15;
-    details.push(`Много поддоменов: ${subdomainCount} > 3 (+15)`);
+    reasons.push(`Много поддоменов: ${subdomainCount} > 3 (+15)`);
   }
   
   // Проверка на символ @ в URL (фишинговая техника)
   if (fullUrl.includes('@') && fullUrl.indexOf('@') < fullUrl.indexOf('/')) {
     score += 25;
-    details.push('Обнаружен символ @ в URL (+25)');
+    reasons.push('Обнаружен символ @ в URL (+25)');
   }
   
-  // Выводим детали в консоль для отладки
-  if (details.length > 0) {
-    console.log('[PhishingProtector] Эвристика URL детали:', details, 'Итого score:', score);
-  }
-  
-  return score;
+  // Возвращаем объект с деталями для отображения всех значений
+  return { score, reasons };
 }
 
 /**
@@ -362,28 +360,32 @@ function performFullCheck(url) {
     // Проверка на омоглифы и Punycode (критический фактор)
     const hasHomoglyphs = checkHomoglyphs(hostname);
     if (hasHomoglyphs) {
-      result.reasons.push('Обнаружено смешение кириллических и латинских символов (омоглифы)');
+      result.reasons.push('Обнаружено смешение кириллических и латинских символов (омоглифы) +50');
       result.score += 50; // +50 баллов как в ТЗ
     }
 
-    // Эвристика URL - КАЖДОЕ правило добавляет свои баллы
-    const urlHeuristicScore = analyzeUrlHeuristics(fullUrl, pathname);
-    if (urlHeuristicScore > 0) {
-      result.reasons.push(`Подозрительные паттерны в URL (score: ${urlHeuristicScore})`);
-      result.score += urlHeuristicScore;
+    // Эвристика URL - КАЖДОЕ правило добавляет свои баллы, получаем детали
+    const heuristicResult = analyzeUrlHeuristics(fullUrl, pathname, hostname);
+    if (heuristicResult.score > 0) {
+      result.score += heuristicResult.score;
+      // Добавляем каждую причину отдельно для детализации
+      heuristicResult.reasons.forEach(r => result.reasons.push(r));
     }
 
     // Проверка на тайпсквоттинг (критический фактор)
     const typosquatResult = checkTyposquatting(hostname);
     if (typosquatResult) {
       const { target, distance } = typosquatResult;
-      result.reasons.push(`Похож на популярный домен "${target}" (тайпсквоттинг, расстояние=${distance})`);
+      let typoScore = 0;
       // Начисляем баллы в зависимости от расстояния Левенштейна
       if (distance === 1) {
-        result.score += 50; // Высокий риск: одна буква изменена
+        typoScore = 50; // Высокий риск: одна буква изменена
+        result.reasons.push(`Похож на "${target}" (расстояние=1) +${typoScore}`);
       } else if (distance === 2) {
-        result.score += 25; // Средний риск: две буквы изменены
+        typoScore = 25; // Средний риск: две буквы изменены
+        result.reasons.push(`Похож на "${target}" (расстояние=2) +${typoScore}`);
       }
+      result.score += typoScore;
     }
 
     // Проверка редиректов (если это сокращатель)
