@@ -237,6 +237,7 @@ function calculateLevenshteinDistance(str1, str2) {
 
 /**
  * Защита от тайпсквоттинга: проверка похожести на популярные домены
+ * Возвращает объект с {target: domain, distance: number} или null
  */
 function checkTyposquatting(inputDomain) {
   const cleanInputDomain = inputDomain.replace(/^www\./, '');
@@ -252,13 +253,12 @@ function checkTyposquatting(inputDomain) {
     
     const distance = calculateLevenshteinDistance(cleanInputDomain, cleanPopularDomain);
     
-    // Если расстояние 1 ИЛИ 2 - возможно тайпсквоттинг, но только для очень похожих доменов
-    // Расстояние 1: одна буква изменена/добавлена/удалена (высокий риск)
-    // Расстояние 2: две буквы изменены (средний риск, но мы помечаем для комбинирования с другими факторами)
-    if (distance === 1) {
-      return popularDomain; // Высокий риск
+    // Если расстояние 1 ИЛИ 2 - возможно тайпсквоттинг
+    // Расстояние 1: одна буква изменена/добавлена/удалена (высокий риск = 50 баллов)
+    // Расстояние 2: две буквы изменены (средний риск = 25 баллов)
+    if (distance === 1 || distance === 2) {
+      return { target: popularDomain, distance: distance };
     }
-    // distance === 2 больше не возвращаем автоматически, это будет учтено в общем score
   }
   
   return null;
@@ -374,25 +374,15 @@ function performFullCheck(url) {
     }
 
     // Проверка на тайпсквоттинг (критический фактор)
-    const typosquatMatch = checkTyposquatting(hostname);
-    if (typosquatMatch) {
-      result.reasons.push(`Похож на популярный домен "${typosquatMatch}" (тайпсквоттинг)`);
-      result.score += 50; // +50 баллов за distance=1, +25 за distance=2
-    }
-    
-    // Дополнительная проверка для distance=2 (возвращаем частичный score)
-    if (!typosquatMatch) {
-      const cleanInputDomain = hostname.replace(/^www\./, '');
-      for (const popularDomain of POPULAR_DOMAINS) {
-        const cleanPopularDomain = popularDomain.replace(/^www\./, '');
-        if (cleanInputDomain === cleanPopularDomain) continue;
-        
-        const distance = calculateLevenshteinDistance(cleanInputDomain, cleanPopularDomain);
-        if (distance === 2) {
-          result.reasons.push(`Отдаленно похож на "${popularDomain}" (расстояние Левенштейна = 2)`);
-          result.score += 25; // +25 баллов за distance=2
-          break;
-        }
+    const typosquatResult = checkTyposquatting(hostname);
+    if (typosquatResult) {
+      const { target, distance } = typosquatResult;
+      result.reasons.push(`Похож на популярный домен "${target}" (тайпсквоттинг, расстояние=${distance})`);
+      // Начисляем баллы в зависимости от расстояния Левенштейна
+      if (distance === 1) {
+        result.score += 50; // Высокий риск: одна буква изменена
+      } else if (distance === 2) {
+        result.score += 25; // Средний риск: две буквы изменены
       }
     }
 
