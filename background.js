@@ -483,27 +483,64 @@ function checkDomainSafetyWithUserSettings(domain) {
     };
   }
   
-  // Стандартная проверка
-  const result = {
-    safe: "unknown",
-    reason: "",
-    details: null,
-    score: 50
-  };
-  
-  // Проверка в базе безопасных сайтов
-  if (SAFE_SITES_DB[cleanDomain]) {
-    result.safe = "safe";
-    result.reason = "Проверенный безопасный сайт";
-    result.details = SAFE_SITES_DB[cleanDomain];
-    result.score = 90;
-  } else {
-    result.safe = "unknown";
-    result.reason = "Сайт не проверен";
+  // ПРОВЕРЯЕМ БЕЛЫЙ СПИСОК - доверенные сайты получают 100 баллов
+  if (WHITELIST_DOMAINS.includes(cleanDomain)) {
+    return {
+      safe: "safe",
+      reason: "Домен в белом списке",
+      details: SAFE_SITES_DB[cleanDomain] || { n: cleanDomain, c: "Доверенный" },
+      score: 100
+    };
   }
   
-  domainCache.set(domain, result);
-  return result;
+  // Проверка в базе безопасных сайтов - получают 90-100 баллов
+  if (SAFE_SITES_DB[cleanDomain]) {
+    return {
+      safe: "safe",
+      reason: "Проверенный безопасный сайт",
+      details: SAFE_SITES_DB[cleanDomain],
+      score: 95
+    };
+  }
+  
+  // ДЛЯ ВСЕХ ОСТАЛЬНЫХ САЙТОВ выполняем ПОЛНУЮ ПРОВЕРКУ НА ФИШИНГ
+  // Создаем тестовый URL для проверки (используем http + домен)
+  const testUrl = `http://${cleanDomain}`;
+  const phishingCheck = performFullCheck(testUrl);
+  
+  // Рассчитываем score безопасности на основе результатов проверки
+  // performFullCheck возвращает score рисков (0-100+), нам нужно инвертировать
+  let safetyScore = 100;
+  
+  if (phishingCheck.isSuspicious && phishingCheck.score >= BLOCKING_THRESHOLD) {
+    // Опасный сайт - низкий score
+    safetyScore = Math.max(0, 100 - phishingCheck.score);
+    return {
+      safe: "unsafe",
+      reason: phishingCheck.reasons.join('; ') || "Подозрительный сайт",
+      details: { n: cleanDomain, c: "Подозрительный" },
+      score: safetyScore,
+      phishingDetails: phishingCheck
+    };
+  } else if (phishingCheck.score > 0) {
+    // Есть некоторые признаки риска, но ниже порога блокировки
+    safetyScore = Math.max(20, 100 - phishingCheck.score);
+    return {
+      safe: "warning",
+      reason: phishingCheck.reasons.join('; ') || "Есть признаки риска",
+      details: { n: cleanDomain, c: "Требует внимания" },
+      score: safetyScore,
+      phishingDetails: phishingCheck
+    };
+  } else {
+    // Чистый сайт, но не в базе - средний score
+    return {
+      safe: "unknown",
+      reason: "Сайт не в базе, но явных угроз не найдено",
+      details: { n: cleanDomain, c: "Неизвестный" },
+      score: 60
+    };
+  }
 }
 
 /**
