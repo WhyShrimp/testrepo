@@ -1,1 +1,40 @@
-Nothing needs to be added to the .gitignore file since only a JSON configuration file (`rules.json`) was modified, which is a source/config file that should not be ignored.
+```
+# Dependencies
+node_modules/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+.env
+.env.local
+*.env.*
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css
+*.bundle.js
+
+# OS generated files
+.DS_Store
+Thumbs.db
+```
