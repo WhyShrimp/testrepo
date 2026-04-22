@@ -684,8 +684,9 @@ if (chrome.webNavigation) {
           score: checkResult.score
         }).catch(err => {
           console.log('[PhishingProtector] Content script не доступен, используем перенаправление');
-          // Если content-скрипт недоступен, перенаправляем на страницу блокировки
-          const warningUrl = chrome.runtime.getURL('blocked.html?url=' + encodeURIComponent(details.url) + '&reason=phishing&score=' + checkResult.score);
+          // Если content-скрипт недоступен, перенаправляем на страницу блокировки с параметрами
+          const reasonsJson = encodeURIComponent(JSON.stringify(checkResult.reasons));
+          const warningUrl = chrome.runtime.getURL('blocked.html?url=' + encodeURIComponent(details.url) + '&score=' + checkResult.score + '&reasons=' + reasonsJson);
           chrome.tabs.update(details.tabId, { url: warningUrl });
         });
       }

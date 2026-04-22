@@ -22,7 +22,7 @@
     }
 
     .container {
-      max-width: 600px;
+      max-width: 700px;
       width: 100%;
       text-align: left;
     }
@@ -45,13 +45,83 @@
       font-size: 16px;
       margin-bottom: 24px;
       word-break: break-all;
+      background: #f8f9fa;
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 4px solid #d93025;
     }
 
     .description {
       color: #5f6368;
       font-size: 16px;
       line-height: 1.5;
-      margin-bottom: 32px;
+      margin-bottom: 24px;
+    }
+
+    .security-details {
+      background: #fff8f8;
+      border: 1px solid #ffd8d8;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .security-details h3 {
+      color: #d93025;
+      font-size: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .score-display {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: #fff;
+      border-radius: 6px;
+    }
+
+    .score-value {
+      font-size: 32px;
+      font-weight: bold;
+      color: #d93025;
+    }
+
+    .score-label {
+      color: #5f6368;
+      font-size: 14px;
+    }
+
+    .threshold-display {
+      font-size: 14px;
+      color: #5f6368;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-radius: 4px;
+    }
+
+    .reasons-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .reasons-list li {
+      padding: 8px 12px;
+      margin: 6px 0;
+      background: #fff;
+      border-radius: 4px;
+      border-left: 3px solid #d93025;
+      font-size: 14px;
+      color: #3c4043;
+    }
+
+    .reasons-list li:before {
+      content: "⚠️ ";
+      margin-right: 8px;
     }
 
     .error-code {
@@ -82,6 +152,9 @@
 
     .actions {
       margin-top: 24px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
     button {
@@ -92,14 +165,35 @@
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s ease;
+    }
+
+    .btn-back {
       background-color: #f8f9fa;
       color: #3c4043;
       border: 1px solid #dadce0;
     }
 
-    button:hover {
+    .btn-back:hover {
       background-color: #f1f3f4;
       border-color: #d2e3fc;
+    }
+
+    .btn-report {
+      background-color: #1a73e8;
+      color: white;
+    }
+
+    .btn-report:hover {
+      background-color: #1557b0;
+    }
+
+    .btn-proceed {
+      background-color: #d93025;
+      color: white;
+    }
+
+    .btn-proceed:hover {
+      background-color: #b02015;
     }
 
     @media (max-width: 480px) {
@@ -114,6 +208,10 @@
       .description {
         font-size: 14px;
       }
+
+      .score-value {
+        font-size: 24px;
+      }
     }
   </style>
 </head>
@@ -125,12 +223,33 @@
     <div class="domain" id="blockedDomain">www.google.com</div>
     
     <p class="description">
-      Эта страница была заблокирована расширением.<br><br>
-      Отключите расширения.
+      Эта страница была заблокирована расширением HubHelp по следующим причинам:
     </p>
 
+    <!-- Блок с деталями безопасности -->
+    <div class="security-details" id="securityDetails" style="display: none;">
+      <h3>🔍 Детали проверки безопасности</h3>
+      
+      <div class="score-display">
+        <div>
+          <div class="score-value" id="scoreValue">0</div>
+          <div class="score-label">баллов риска</div>
+        </div>
+        <div class="threshold-display">
+          Порог блокировки: <strong id="thresholdValue">120</strong> баллов
+        </div>
+      </div>
+      
+      <h4 style="color: #3c4043; font-size: 14px; margin-bottom: 8px;">Причины блокировки:</h4>
+      <ul class="reasons-list" id="reasonsList">
+        <!-- Причины будут добавлены через JS -->
+      </ul>
+    </div>
+
     <div class="actions">
-      <button onclick="goBack()">Вернуться назад</button>
+      <button class="btn-back" onclick="goBack()">Вернуться назад</button>
+      <button class="btn-report" onclick="reportPhishing()">Сообщить о фишинге</button>
+      <button class="btn-proceed" onclick="proceedAnyway()">Перейти всё равно (не рекомендуется)</button>
     </div>
     
     <div class="error-code">
@@ -148,18 +267,85 @@
     const urlParams = new URLSearchParams(window.location.search);
     const blockedUrl = urlParams.get('url');
     const domain = urlParams.get('domain');
+    const score = urlParams.get('score');
+    const reasonsParam = urlParams.get('reasons');
 
     // Отображаем домен
-    if (domain) {
+    if (blockedUrl) {
+      document.getElementById('blockedDomain').textContent = blockedUrl;
+      document.title = blockedUrl + ' заблокирован - HubHelp';
+    } else if (domain) {
       document.getElementById('blockedDomain').textContent = domain;
       document.title = domain + ' заблокирован - HubHelp';
     } else {
       document.getElementById('blockedDomain').textContent = 'Неизвестный домен';
     }
 
+    // Отображаем детали безопасности если они есть
+    if (score !== null) {
+      const scoreNum = parseInt(score) || 0;
+      const threshold = 120; // Должно совпадать с BLOCKING_THRESHOLD в background.js
+      
+      document.getElementById('scoreValue').textContent = scoreNum;
+      document.getElementById('thresholdValue').textContent = threshold;
+      document.getElementById('securityDetails').style.display = 'block';
+      
+      // Парсим причины из JSON или query param
+      let reasons = [];
+      if (reasonsParam) {
+        try {
+          reasons = JSON.parse(decodeURIComponent(reasonsParam));
+        } catch (e) {
+          // Если не JSON, пытаемся разбить по разделителю
+          reasons = decodeURIComponent(reasonsParam).split('||');
+        }
+      }
+      
+      // Отображаем причины
+      const reasonsList = document.getElementById('reasonsList');
+      if (reasons && reasons.length > 0) {
+        reasons.forEach(reason => {
+          const li = document.createElement('li');
+          li.textContent = reason;
+          reasonsList.appendChild(li);
+        });
+      } else {
+        const li = document.createElement('li');
+        li.textContent = 'Превышен порог безопасности (' + scoreNum + ' >= ' + threshold + ')';
+        reasonsList.appendChild(li);
+      }
+    }
+
     // Функция возврата назад
     function goBack() {
       window.history.back();
+    }
+
+    // Функция сообщения о фишинге
+    function reportPhishing() {
+      // Отправляем сообщение background скрипту
+      chrome.runtime.sendMessage({
+        action: 'reportPhishing',
+        url: blockedUrl || domain,
+        score: score,
+        reasons: reasonsParam ? JSON.parse(decodeURIComponent(reasonsParam)) : []
+      }, (response) => {
+        if (response && response.success) {
+          alert('Спасибо! Информация о подозрительном сайте отправлена.');
+        } else {
+          alert('Отчет отправлен. Мы проверим этот сайт.');
+        }
+      });
+    }
+
+    // Функция перехода несмотря на предупреждение
+    function proceedAnyway() {
+      if (confirm('Вы уверены, что хотите перейти на этот сайт? Это может быть опасно!')) {
+        // Добавляем параметр для обхода проверки
+        const originalUrl = blockedUrl || 'https://' + domain;
+        const bypassUrl = originalUrl + (originalUrl.includes('?') ? '&' : '?') + 'hubhelp_bypass=' + Date.now();
+        window.location.href = bypassUrl;
+      }
     }
 
     // Обработка кнопки "Назад" браузера
